@@ -1,0 +1,29 @@
+{
+  "a": {
+    "file": "media/beispiel.mp3",
+    "title": "Audio-Titel",
+    "subtitle": "Optionaler Untertitel",
+    "text": "Optionaler Fließtext",
+    "image": "media/beispiel-cover.jpg"
+  },
+  "b": {
+    "file": "media/beispiel.mp4",
+    "title": "Video-Titel"
+  },
+  "c": {
+    "images": [
+      "media/bild1.jpg",
+      "media/bild2.jpg"
+    ],
+    "title": "Galerie-Titel",
+    "subtitle": "Optionaler Untertitel",
+    "text": "Optionaler Fließtext"
+  },
+  "d": null,
+  "e": null,
+  "f": null,
+  "g": null,
+  "h": null,
+  "i": null,
+  "j": null
+}

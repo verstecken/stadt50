@@ -3,6 +3,9 @@
 .cursorignore
 .cursor/rules/
 
+# Lokale Konfiguration (Admin speichert hierhin)
+config.json
+
 # Medien (Ordner bleibt, Inhalt nicht versionieren)
 media/*
 !media/.gitkeep
