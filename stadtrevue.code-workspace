@@ -1,0 +1,13 @@
+{
+  "folders": [
+    { "path": ".", "name": "stadtrevue" },
+    { "path": "pico-button-test", "name": "Pico Firmware" }
+  ],
+  "settings": {
+    "platformio-ide.multiProjects": true,
+    "platformio-ide.defaultEnv": "pico"
+  },
+  "extensions": {
+    "recommendations": ["platformio.platformio-ide"]
+  }
+}

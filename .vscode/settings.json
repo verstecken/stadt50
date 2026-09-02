@@ -1,0 +1,4 @@
+{
+  "platformio-ide.multiProjects": true,
+  "platformio-ide.defaultEnv": "pico"
+}

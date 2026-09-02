@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    * { margin: 0; box-sizing: border-box; }
+    body { font-family: ui-monospace, monospace; background: #000; color: #fff; overflow: hidden; }
+    #logo { position: fixed; top: 0; left: 0; z-index: 20; filter: invert(1); height: 3rem; width: auto; }
+    #connect { position: fixed; top: 1rem; right: 1rem; font: inherit; padding: 0.25rem 0.5rem; border: 1px solid #ccc; background: #fff; color: #000; cursor: pointer; z-index: 20; }
+    #connect.hidden { display: none; }
+    #overlay { display: none; position: fixed; inset: 0; background: #000; z-index: 10; flex-direction: column; }
+    #overlay.active { display: flex; align-items: center; justify-content: center; }
+    #overlay video, #overlay img { max-width: 100%; max-height: 100%; object-fit: contain; }
+    #audio-ui { display: none; padding: 2rem; max-width: 64rem; width: 100%; }
+    #audio-ui.visible { display: flex; flex-direction: column; align-items: center; gap: 2rem; }
+    #audio-main { display: flex; gap: 2rem; align-items: flex-start; width: 100%; }
+    #audio-cover { display: none; width: 26rem; max-height: 55vh; flex-shrink: 0; object-fit: cover; aspect-ratio: 1; }
+    #audio-cover.visible { display: block; }
+    #audio-text { flex: 1; display: flex; flex-direction: column; gap: 0.75rem; text-align: left; min-width: 0; }
+    #audio-title { font-size: 1.75rem; font-weight: normal; line-height: 1.2; }
+    #audio-subtitle { font-size: 1rem; opacity: 0.65; line-height: 1.3; display: none; }
+    #audio-subtitle.visible { display: block; }
+    #audio-body { font-size: 0.95rem; line-height: 1.6; opacity: 0.85; white-space: pre-wrap; display: none; }
+    #audio-body.visible { display: block; }
+    #audio-action { display: flex; flex-direction: column; align-items: center; gap: 1rem; }
+    #audio-icon { width: 3.5rem; height: 3.5rem; }
+    #audio-hint { font-size: 0.9rem; line-height: 1.5; min-height: 3rem; max-width: 22rem; opacity: 0.75; text-align: center; }
+    #gallery-ui { display: none; padding: 2rem; max-width: 64rem; width: 100%; flex-direction: column; align-items: center; gap: 1.5rem; text-align: center; }
+    #gallery-ui.visible { display: flex; }
+    #gallery-title { font-size: 1.75rem; font-weight: normal; line-height: 1.2; }
+    #gallery-subtitle { font-size: 1rem; opacity: 0.65; display: none; }
+    #gallery-subtitle.visible { display: block; }
+    #gallery-body { font-size: 0.95rem; line-height: 1.6; opacity: 0.85; white-space: pre-wrap; display: none; max-width: 36rem; text-align: left; }
+    #gallery-body.visible { display: block; }
+    #gallery-thumbs { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; max-width: 100%; }
+    #gallery-thumbs img { width: 5rem; height: 5rem; object-fit: cover; opacity: 0.85; }
+    #gallery-hint { font-size: 0.9rem; opacity: 0.75; min-height: 1.5rem; }
+    #gallery-counter { display: none; position: fixed; bottom: 1.5rem; left: 1.5rem; font-size: 1rem; z-index: 12; opacity: 0.75; }
+    #gallery-counter.visible { display: block; }
+    #debug { position: fixed; bottom: 0; left: 0; right: 0; padding: 0.5rem 1rem; background: rgba(0,0,0,0.8); border-top: 1px solid #333; font-size: 0.875rem; z-index: 20; display: none; }
+    #debug.visible { display: block; }
+  </style>
+</head>
+<body>
+  <img id="logo" src="stadtrevue_logoB.svg" alt="Stadtrevue">
+  <button id="connect" type="button">Start</button>
+  <div id="overlay">
+    <video id="video" playsinline></video>
+    <img id="image" alt="">
+    <div id="audio-ui">
+      <div id="audio-main">
+        <img id="audio-cover" alt="">
+        <div id="audio-text">
+          <h2 id="audio-title"></h2>
+          <p id="audio-subtitle"></p>
+          <p id="audio-body"></p>
+        </div>
+      </div>
+      <div id="audio-action">
+        <img id="audio-icon" src="icons/headphones.svg" alt="">
+        <p id="audio-hint">Bitte Kopfhörer aufsetzen und erneut drücken!</p>
+      </div>
+    </div>
+    <div id="gallery-ui">
+      <h2 id="gallery-title"></h2>
+      <p id="gallery-subtitle"></p>
+      <p id="gallery-body"></p>
+      <div id="gallery-thumbs"></div>
+      <p id="gallery-hint">Erneut drücken, um Slideshow zu starten</p>
+    </div>
+    <div id="gallery-counter"></div>
+    <audio id="audio"></audio>
+  </div>
+  <div id="debug"></div>
+  <script>
+    const KEYS = 'abcdefghij'.split('');
+    const connectBtn = document.getElementById('connect');
+    const overlay = document.getElementById('overlay');
+    const video = document.getElementById('video');
+    const audio = document.getElementById('audio');
+    const image = document.getElementById('image');
+    const audioUi = document.getElementById('audio-ui');
+    const audioTitle = document.getElementById('audio-title');
+    const audioSubtitle = document.getElementById('audio-subtitle');
+    const audioBody = document.getElementById('audio-body');
+    const audioCover = document.getElementById('audio-cover');
+    const audioIcon = document.getElementById('audio-icon');
+    const audioHint = document.getElementById('audio-hint');
+    const galleryUi = document.getElementById('gallery-ui');
+    const galleryTitle = document.getElementById('gallery-title');
+    const gallerySubtitle = document.getElementById('gallery-subtitle');
+    const galleryBody = document.getElementById('gallery-body');
+    const galleryThumbs = document.getElementById('gallery-thumbs');
+    const galleryHint = document.getElementById('gallery-hint');
+    const galleryCounter = document.getElementById('gallery-counter');
+    const debugEl = document.getElementById('debug');
+    const HINT_PROMPT = 'Bitte Kopfhörer aufsetzen und erneut drücken!';
+    const HINT_PLAYING = 'Audio wird abgespielt …';
+    const GALLERY_HINT = 'Erneut drücken, um Slideshow zu starten';
+    let config = {};
+    let buffer = '';
+    let currentKey = null;
+    let audioAwaitingConfirm = false;
+    let galleryAwaitingStart = false;
+    let galleryIndex = -1;
+    let serialWriter = null;
+    let serialChain = Promise.resolve();
+    let mediaUnlocked = false;
+    const textEncoder = new TextEncoder();
+    const configReady = fetch('/api/config').then(r => r.json()).then(data => {
+      config = data;
+    }).catch(() => {});
+
+    function mediaUrl(path) {
+      const i = path.lastIndexOf('/');
+      if (i === -1) return encodeURIComponent(path);
+      return path.slice(0, i + 1) + encodeURIComponent(path.slice(i + 1));
+    }
+
+    async function unlockMedia() {
+      if (mediaUnlocked) return;
+      try {
+        const silent = new Audio('data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//uQZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWgAAAA0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//uQZAAAAAA==');
+        silent.volume = 0.001;
+        await silent.play();
+        silent.pause();
+      } catch (e) {}
+      mediaUnlocked = true;
+    }
+
+    async function sendSerial(msg) {
+      if (!serialWriter) return;
+      serialChain = serialChain.then(async () => {
+        if (!serialWriter) return;
+        try {
+          await serialWriter.write(textEncoder.encode(msg + '\n'));
+        } catch (e) {}
+      });
+      return serialChain;
+    }
+
+    async function setButtonLed(key, on) {
+      if (!key) return;
+      await sendSerial(on ? `${key}1` : `${key}0`);
+    }
+
+    async function allLedsOff() {
+      await sendSerial('X0');
+    }
+
+    function playMedia(el) {
+      const p = el.play();
+      if (p && p.catch) {
+        p.catch(err => {
+          setDebug(currentKey, ` FEHLER: ${err.message}`);
+          debugEl.classList.add('visible');
+        });
+      }
+    }
+
+    function mediaType(file) {
+      const ext = file.split('.').pop().toLowerCase();
+      if (['mp4', 'webm', 'mov', 'm4v'].includes(ext)) return 'video';
+      if (['mp3', 'wav', 'wave', 'ogg', 'm4a', 'aac', 'flac'].includes(ext)) return 'audio';
+      if (['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'tif', 'tiff'].includes(ext)) return 'image';
+      return null;
+    }
+
+    function entryType(entry) {
+      if (entry?.images?.length) return 'gallery';
+      if (entry?.file) return mediaType(entry.file);
+      return null;
+    }
+
+    function setDebug(key, extra = '') {
+      const entry = config[key];
+      if (!entry) {
+        debugEl.textContent = `${key} → —`;
+        return;
+      }
+      const type = entryType(entry);
+      const name = entry.images
+        ? `${entry.images.length} Bilder`
+        : entry.file.split('/').pop();
+      debugEl.textContent = `${key} → ${name} (${type})${extra}`;
+    }
+
+    function fillAudioContent(entry) {
+      audioTitle.textContent = entry.title || '';
+      if (entry.subtitle) {
+        audioSubtitle.textContent = entry.subtitle;
+        audioSubtitle.classList.add('visible');
+      } else {
+        audioSubtitle.textContent = '';
+        audioSubtitle.classList.remove('visible');
+      }
+      if (entry.text) {
+        audioBody.textContent = entry.text;
+        audioBody.classList.add('visible');
+      } else {
+        audioBody.textContent = '';
+        audioBody.classList.remove('visible');
+      }
+      if (entry.image) {
+        audioCover.src = mediaUrl(entry.image);
+        audioCover.classList.add('visible');
+      } else {
+        audioCover.removeAttribute('src');
+        audioCover.classList.remove('visible');
+      }
+    }
+
+    function resetGalleryUi() {
+      galleryUi.classList.remove('visible');
+      galleryTitle.textContent = '';
+      gallerySubtitle.textContent = '';
+      gallerySubtitle.classList.remove('visible');
+      galleryBody.textContent = '';
+      galleryBody.classList.remove('visible');
+      galleryThumbs.innerHTML = '';
+      galleryHint.textContent = GALLERY_HINT;
+      galleryCounter.classList.remove('visible');
+      galleryCounter.textContent = '';
+      galleryAwaitingStart = false;
+      galleryIndex = -1;
+    }
+
+    function resetAudioUi() {
+      audioUi.classList.remove('visible');
+      audioTitle.textContent = '';
+      audioSubtitle.textContent = '';
+      audioSubtitle.classList.remove('visible');
+      audioBody.textContent = '';
+      audioBody.classList.remove('visible');
+      audioCover.removeAttribute('src');
+      audioCover.classList.remove('visible');
+      audioIcon.src = 'icons/headphones.svg';
+      audioHint.textContent = HINT_PROMPT;
+    }
+
+    async function hideOverlay() {
+      if (currentKey) await setButtonLed(currentKey, false);
+      overlay.classList.remove('active');
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+      video.onended = null;
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.load();
+      audio.onended = null;
+      image.removeAttribute('src');
+      image.style.display = 'none';
+      video.style.display = 'none';
+      resetAudioUi();
+      resetGalleryUi();
+      currentKey = null;
+      audioAwaitingConfirm = false;
+    }
+
+    function fillGalleryIntro(entry) {
+      galleryTitle.textContent = entry.title || '';
+      if (entry.subtitle) {
+        gallerySubtitle.textContent = entry.subtitle;
+        gallerySubtitle.classList.add('visible');
+      } else {
+        gallerySubtitle.textContent = '';
+        gallerySubtitle.classList.remove('visible');
+      }
+      if (entry.text) {
+        galleryBody.textContent = entry.text;
+        galleryBody.classList.add('visible');
+      } else {
+        galleryBody.textContent = '';
+        galleryBody.classList.remove('visible');
+      }
+      galleryThumbs.innerHTML = '';
+      entry.images.forEach(path => {
+        const img = document.createElement('img');
+        img.src = mediaUrl(path);
+        img.alt = '';
+        galleryThumbs.appendChild(img);
+      });
+      galleryHint.textContent = GALLERY_HINT;
+    }
+
+    function showGalleryIntro(key, entry) {
+      galleryAwaitingStart = true;
+      galleryIndex = -1;
+      image.style.display = 'none';
+      galleryCounter.classList.remove('visible');
+      fillGalleryIntro(entry);
+      galleryUi.classList.add('visible');
+      setDebug(key, ' (intro)');
+    }
+
+    function showGallerySlide(entry) {
+      const total = entry.images.length;
+      galleryUi.classList.remove('visible');
+      image.style.display = 'block';
+      image.src = mediaUrl(entry.images[galleryIndex]);
+      galleryCounter.textContent = `${galleryIndex + 1}/${total}`;
+      galleryCounter.classList.add('visible');
+      setDebug(currentKey, ` (${galleryIndex + 1}/${total})`);
+    }
+
+    async function startGallerySlideshow(key, entry) {
+      galleryAwaitingStart = false;
+      galleryIndex = 0;
+      showGallerySlide(entry);
+      await setButtonLed(key, true);
+    }
+
+    async function advanceGallery(key, entry) {
+      galleryIndex++;
+      if (galleryIndex >= entry.images.length) {
+        await hideOverlay();
+        setDebug(key);
+        return;
+      }
+      showGallerySlide(entry);
+    }
+
+    function showAudioPrompt(key, entry) {
+      audioAwaitingConfirm = true;
+      fillAudioContent(entry);
+      audioIcon.src = 'icons/headphones.svg';
+      audioHint.textContent = HINT_PROMPT;
+      audioUi.classList.add('visible');
+      setDebug(key, ' (prompt)');
+    }
+
+    async function playAudio(key, entry) {
+      audioAwaitingConfirm = false;
+      fillAudioContent(entry);
+      audioIcon.src = 'icons/play.svg';
+      audioHint.textContent = HINT_PLAYING;
+      audioUi.classList.add('visible');
+      audio.src = mediaUrl(entry.file);
+      playMedia(audio);
+      audio.onended = () => { hideOverlay(); };
+      await setButtonLed(key, true);
+      setDebug(key, ' (playing)');
+    }
+
+    async function showMedia(key) {
+      await configReady;
+      if (!mediaUnlocked) {
+        setDebug(key, ' — erst Start klicken!');
+        debugEl.classList.add('visible');
+        return;
+      }
+      const entry = config[key];
+      if (!entryType(entry)) {
+        setDebug(key);
+        return;
+      }
+      const type = entryType(entry);
+
+      const sameKey = currentKey === key && overlay.classList.contains('active');
+
+      if (sameKey && type === 'audio' && audioAwaitingConfirm) {
+        await playAudio(key, entry);
+        return;
+      }
+
+      if (sameKey && type === 'gallery' && galleryAwaitingStart) {
+        await startGallerySlideshow(key, entry);
+        return;
+      }
+
+      if (sameKey && type === 'gallery' && !galleryAwaitingStart) {
+        advanceGallery(key, entry);
+        return;
+      }
+
+      if (sameKey && (type === 'video' || (type === 'audio' && !audioAwaitingConfirm))) {
+        await hideOverlay();
+        setDebug(key);
+        return;
+      }
+
+      await hideOverlay();
+      currentKey = key;
+      setDebug(key);
+      overlay.classList.add('active');
+
+      if (type === 'video') {
+        video.style.display = 'block';
+        video.src = mediaUrl(entry.file);
+        playMedia(video);
+        video.onended = () => { hideOverlay(); };
+        await setButtonLed(key, true);
+      } else if (type === 'audio') {
+        showAudioPrompt(key, entry);
+        await setButtonLed(key, true);
+      } else if (type === 'gallery') {
+        showGalleryIntro(key, entry);
+        await setButtonLed(key, true);
+      }
+    }
+
+    async function onPress(key) {
+      if (!KEYS.includes(key)) return;
+      await showMedia(key);
+    }
+
+    document.addEventListener('keydown', async e => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        debugEl.classList.toggle('visible');
+        return;
+      }
+      await unlockMedia();
+      onPress(e.key.toLowerCase());
+    });
+
+    async function readSerial(port) {
+      await port.open({ baudRate: 115200 });
+      connectBtn.classList.add('hidden');
+      serialWriter = port.writable.getWriter();
+      await allLedsOff();
+      const reader = port.readable.getReader();
+      const decoder = new TextDecoder();
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value);
+          let i;
+          while ((i = buffer.indexOf('\n')) !== -1) {
+            const key = buffer.slice(0, i).trim()[0];
+            buffer = buffer.slice(i + 1);
+            if (key && KEYS.includes(key)) onPress(key);
+          }
+        }
+      } finally {
+        reader.releaseLock();
+        serialWriter.releaseLock();
+        serialWriter = null;
+      }
+    }
+
+    async function connect(port) {
+      try {
+        readSerial(port);
+      } catch (e) {
+        connectBtn.classList.remove('hidden');
+      }
+    }
+
+    connectBtn.addEventListener('click', async () => {
+      await unlockMedia();
+      if (!('serial' in navigator)) return;
+      try {
+        const ports = await navigator.serial.getPorts();
+        const port = ports.length ? ports[0] : await navigator.serial.requestPort();
+        connect(port);
+      } catch (e) {
+        connectBtn.classList.remove('hidden');
+      }
+    });
+
+    window.addEventListener('pagehide', () => {
+      if (serialWriter) {
+        serialWriter.write(textEncoder.encode('X0\n')).catch(() => {});
+      }
+    });
+
+    if (!('serial' in navigator)) {
+      connectBtn.textContent = 'Start';
+    }
+  </script>
+</body>
+</html>
