@@ -105,6 +105,7 @@
     let galleryAwaitingStart = false;
     let galleryIndex = -1;
     let serialWriter = null;
+    let serialPort = null;
     let serialChain = Promise.resolve();
     let mediaUnlocked = false;
     const textEncoder = new TextEncoder();
@@ -127,6 +128,12 @@
         silent.pause();
       } catch (e) {}
       mediaUnlocked = true;
+      updateStartButton();
+    }
+
+    function updateStartButton() {
+      const serialReady = !('serial' in navigator) || !!serialWriter;
+      connectBtn.classList.toggle('hidden', mediaUnlocked && serialReady);
     }
 
     async function sendSerial(msg) {
@@ -168,8 +175,15 @@
     }
 
     function entryType(entry) {
-      if (entry?.images?.length) return 'gallery';
+      if (entry?.images?.length > 1) return 'gallery';
+      if (entry?.images?.length === 1) return 'image';
       if (entry?.file) return mediaType(entry.file);
+      return null;
+    }
+
+    function imagePath(entry) {
+      if (entry?.images?.length) return entry.images[0];
+      if (entry?.file && mediaType(entry.file) === 'image') return entry.file;
       return null;
     }
 
@@ -180,9 +194,9 @@
         return;
       }
       const type = entryType(entry);
-      const name = entry.images
+      const name = entry.images?.length > 1
         ? `${entry.images.length} Bilder`
-        : entry.file.split('/').pop();
+        : (entry.file || entry.images?.[0] || '').split('/').pop();
       debugEl.textContent = `${key} → ${name} (${type})${extra}`;
     }
 
@@ -285,6 +299,16 @@
       galleryHint.textContent = GALLERY_HINT;
     }
 
+    function showSingleImage(entry) {
+      resetGalleryUi();
+      resetAudioUi();
+      galleryUi.classList.remove('visible');
+      video.style.display = 'none';
+      image.style.display = 'block';
+      image.src = mediaUrl(imagePath(entry));
+      galleryCounter.classList.remove('visible');
+    }
+
     function showGalleryIntro(key, entry) {
       galleryAwaitingStart = true;
       galleryIndex = -1;
@@ -375,7 +399,7 @@
         return;
       }
 
-      if (sameKey && (type === 'video' || (type === 'audio' && !audioAwaitingConfirm))) {
+      if (sameKey && (type === 'video' || type === 'image' || (type === 'audio' && !audioAwaitingConfirm))) {
         await hideOverlay();
         setDebug(key);
         return;
@@ -394,6 +418,9 @@
         await setButtonLed(key, true);
       } else if (type === 'audio') {
         showAudioPrompt(key, entry);
+        await setButtonLed(key, true);
+      } else if (type === 'image') {
+        showSingleImage(entry);
         await setButtonLed(key, true);
       } else if (type === 'gallery') {
         showGalleryIntro(key, entry);
@@ -417,10 +444,12 @@
     });
 
     async function readSerial(port) {
+      if (serialWriter) return;
+      serialPort = port;
       await port.open({ baudRate: 115200 });
-      connectBtn.classList.add('hidden');
       serialWriter = port.writable.getWriter();
       await allLedsOff();
+      updateStartButton();
       const reader = port.readable.getReader();
       const decoder = new TextDecoder();
       try {
@@ -437,30 +466,48 @@
         }
       } finally {
         reader.releaseLock();
-        serialWriter.releaseLock();
+        try { serialWriter.releaseLock(); } catch (e) {}
         serialWriter = null;
+        serialPort = null;
+        updateStartButton();
       }
     }
 
-    async function connect(port) {
+    async function connectSerial(port) {
       try {
-        readSerial(port);
+        await readSerial(port);
       } catch (e) {
-        connectBtn.classList.remove('hidden');
+        updateStartButton();
       }
+    }
+
+    async function tryAutoConnect() {
+      if (!('serial' in navigator) || serialWriter) return;
+      try {
+        const ports = await navigator.serial.getPorts();
+        if (ports.length) await connectSerial(ports[0]);
+      } catch (e) {}
     }
 
     connectBtn.addEventListener('click', async () => {
       await unlockMedia();
       if (!('serial' in navigator)) return;
+      if (serialWriter) return;
       try {
         const ports = await navigator.serial.getPorts();
         const port = ports.length ? ports[0] : await navigator.serial.requestPort();
-        connect(port);
+        await connectSerial(port);
       } catch (e) {
-        connectBtn.classList.remove('hidden');
+        updateStartButton();
       }
     });
+
+    if ('serial' in navigator) {
+      navigator.serial.addEventListener('connect', e => {
+        connectSerial(e.port || e.target);
+      });
+      tryAutoConnect();
+    }
 
     window.addEventListener('pagehide', () => {
       if (serialWriter) {
@@ -471,6 +518,7 @@
     if (!('serial' in navigator)) {
       connectBtn.textContent = 'Start';
     }
+    updateStartButton();
   </script>
 </body>
 </html>
