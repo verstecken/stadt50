@@ -20,7 +20,8 @@
 // Pin 30 = RUN (Reset), kein GPIO
 //
 // Pico -> Chrome:  a-j bei Druck
-// Chrome -> Pico:  a1 = LED a blinkt, a0 = LED a aus, X0 = alle aus
+// Chrome -> Pico:  X1 = alle an (Leerlauf), X0 = alle aus
+//                  a1 = nur a blinkt, Rest aus; a0 = zurück zu X1 (alle an)
 
 static const uint8_t BTN_PINS[] = {5, 6, 7, 9, 10, 11, 12, 13, 14, 15};
 static const uint8_t LED_PINS[] = {28, 27, 26, 22, 21, 20, 19, 18, 17, 16};
@@ -56,12 +57,21 @@ void allLedsOff() {
   }
 }
 
+void allLedsOn() {
+  blinkIndex = -1;
+  for (int i = 0; i < NUM; i++) {
+    setLedSolid(i, true);
+  }
+}
+
 void handleSerial() {
   while (Serial.available()) {
     char c = Serial.read();
     if (c == '\n') {
       serialLine.trim();
-      if (serialLine == "X0" || serialLine == "V0") {
+      if (serialLine == "X1") {
+        allLedsOn();
+      } else if (serialLine == "X0" || serialLine == "V0") {
         allLedsOff();
       } else if (serialLine.length() == 2) {
         int i = keyIndex(serialLine[0]);
@@ -72,9 +82,10 @@ void handleSerial() {
             }
             blinkIndex = i;
             lastBlink = 0;
+            ledState = false;
           } else if (serialLine[1] == '0') {
             if (blinkIndex == i) blinkIndex = -1;
-            setLedSolid(i, false);
+            allLedsOn();
           }
         }
       }
@@ -99,14 +110,8 @@ void setup() {
   for (int i = 0; i < NUM; i++) {
     pinMode(BTN_PINS[i], INPUT_PULLUP);
     pinMode(LED_PINS[i], OUTPUT);
-    setLedSolid(i, false);
   }
-  // Kurzer Starttest: jede LED nacheinander 300 ms (nur Verkabelung prüfen)
-  for (int i = 0; i < NUM; i++) {
-    setLedSolid(i, true);
-    delay(300);
-    setLedSolid(i, false);
-  }
+  allLedsOn();
 }
 
 void loop() {

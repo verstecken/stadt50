@@ -152,6 +152,10 @@
       await sendSerial(on ? `${key}1` : `${key}0`);
     }
 
+    async function allLedsIdle() {
+      await sendSerial('X1');
+    }
+
     async function allLedsOff() {
       await sendSerial('X0');
     }
@@ -254,7 +258,7 @@
     }
 
     async function hideOverlay() {
-      if (currentKey) await setButtonLed(currentKey, false);
+      if (currentKey) await allLedsIdle();
       overlay.classList.remove('active');
       video.pause();
       video.removeAttribute('src');
@@ -448,7 +452,7 @@
       serialPort = port;
       await port.open({ baudRate: 115200 });
       serialWriter = port.writable.getWriter();
-      await allLedsOff();
+      await allLedsIdle();
       updateStartButton();
       const reader = port.readable.getReader();
       const decoder = new TextDecoder();
@@ -511,7 +515,7 @@
 
     window.addEventListener('pagehide', () => {
       if (serialWriter) {
-        serialWriter.write(textEncoder.encode('X0\n')).catch(() => {});
+        serialWriter.write(textEncoder.encode('X1\n')).catch(() => {});
       }
     });
 
